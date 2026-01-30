@@ -1,0 +1,11 @@
+langchain
+pandas
+streamlit
+langchain-community
+sentence-transformers
+transformers
+langchain-huggingface
+Chroma
+dotenv
+openai
+langchain-classic
