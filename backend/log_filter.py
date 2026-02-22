@@ -52,4 +52,105 @@ def categorize_error(line):
             return category
     return 'application'
 
+def extract_error_code(line):
+    """Extract error codes from log line"""
+    # HTTP status codes
+    http_match = re.search(r'\b(\d{3})\b', line)
+    if http_match and http_match.group(1).startswith(('4', '5')):
+        return f"HTTP_{http_match.group(1)}" #This returns the error code like HTTP_404 OR HTTP_500
 
+    code_patterns = [
+        r'ERR[_-](\w+)', #ERR_123,ERR-DBFAIL
+        r'ERROR[_-](\w+)', #ERROR_TIMEOUT,ERROR-401
+        r'code[:\s]+(\w+)', #code: 404,code  DB_ERR
+        r'error\s+code\s*[=:]\s*(\w+)', #error code = 500,error code:AUTH_FAIL
+        r'\[(\w+)\]', #[ERROR123],[DB_FAIL]
+    ]
+    for pattern in code_patterns:
+        match = re.search(pattern, line, re.IGNORECASE)
+        if match:
+            return match.group(1).upper()  #Finds pattern in the line
+    
+    return None
+
+
+def process_log_stream(text_stream, selected_patterns, progress_bar=None, status_text=None):
+    """Process log file stream with progress tracking"""
+    errors = []
+    stats = {
+        'total_lines': 0,
+        'error_count': 0,
+        'categories': Counter(),
+        'error_codes': Counter(),
+        'pattern_matches': Counter()
+    }
+    
+    # Compile selected patterns
+    compiled_patterns = [(re.compile(pattern, re.IGNORECASE), desc) 
+                         for pattern, desc in ERROR_PATTERNS.items() 
+                         if pattern in selected_patterns]  #This stores regex and thier description in the compiled patterns
+                    
+    
+    # Read and process line by line
+    line_buffer = []
+    chunk_size = 10000  # Process in chunks for progress updates
+    
+    for line_num, line in enumerate(text_stream, 1):
+        line = line.rstrip('\n')
+        stats['total_lines'] += 1
+        
+        # Check if line matches any selected pattern
+        matched = False
+        matched_pattern = None
+        
+        for pattern, desc in compiled_patterns:
+            if pattern.search(line):
+                matched = True
+                matched_pattern = desc
+                stats['pattern_matches'][desc] += 1
+                break
+        
+        if matched:
+            stats['error_count'] += 1
+            
+            # Categorize error
+            category = categorize_error(line)
+            stats['categories'][category] += 1
+            
+            # Extract error code
+            error_code = extract_error_code(line)
+            if error_code:
+                stats['error_codes'][error_code] += 1
+            
+            # Store error details
+            errors.append({
+                'line_number': line_num,
+                'content': line,
+                'category': category,
+                'error_code': error_code,
+                'matched_pattern': matched_pattern
+            })
+        
+        # Store line for context (keep last few lines)
+        line_buffer.append(line)
+        if len(line_buffer) > 10:
+            line_buffer.pop(0)
+        
+        # Update progress every chunk_size lines
+        if line_num % chunk_size == 0:
+            if progress_bar:
+                progress_bar.progress(min(line_num / 1000000, 1.0))  # Cap at 1M lines for progress
+            if status_text:
+                status_text.text(f"Processed {line_num:,} lines... Found {stats['error_count']:,} errors")
+    
+    return errors, stats
+
+def create_download_link(df, filename="errors_export.csv"):
+    """Create a download link for DataFrame"""
+    csv = df.to_csv(index=False)
+    b64 = base64.b64encode(csv.encode()).decode()
+    href = f'<a href="data:file/csv;base64,{b64}" download="{filename}">📥 Download CSV</a>'
+    return href
+
+
+        
