@@ -1,0 +1,88 @@
+<div class="table-wrap" *ngIf="result()">
+
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <div class="search-wrap">
+      <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      <input
+        class="search-input mono"
+        type="text"
+        placeholder="filter errors..."
+        [value]="search()"
+        (input)="onSearch($any($event.target).value)"
+      >
+    </div>
+
+    <div class="filter-tabs">
+      <button
+        class="filter-tab"
+        *ngFor="let cat of categories()"
+        [class.active]="filterCategory() === cat"
+        (click)="onFilter(cat)"
+      >
+        {{ cat }}
+      </button>
+    </div>
+
+    <span class="result-count mono">
+      {{ filtered().length | number }} results
+    </span>
+  </div>
+
+  <!-- Table -->
+  <div class="tbl-container">
+    <table class="error-tbl">
+      <thead>
+        <tr>
+          <th class="col-line">LINE</th>
+          <th class="col-type">TYPE</th>
+          <th class="col-cat">CATEGORY</th>
+          <th class="col-code">CODE</th>
+          <th class="col-content">LOG CONTENT</th>
+        </tr>
+      </thead>
+      <tbody>
+        <ng-container *ngFor="let e of paged()">
+          <tr
+            class="error-row"
+            [class]="severityClass(e)"
+            [class.expanded]="expandedLine() === e.line_number"
+            (click)="toggleExpand(e.line_number)"
+          >
+            <td class="col-line mono">{{ e.line_number }}</td>
+            <td class="col-type">
+              <span class="badge" [class]="severityClass(e) === 'sev-critical' ? 'badge-red' : (severityClass(e) === 'sev-error' ? 'badge-amber' : 'badge-green')">
+                {{ e.matched_pattern }}
+              </span>
+            </td>
+            <td class="col-cat">
+              <span class="badge" [class]="categoryBadge(e.category)">{{ e.category }}</span>
+            </td>
+            <td class="col-code mono">{{ e.error_code ?? '—' }}</td>
+            <td class="col-content mono">{{ e.content }}</td>
+          </tr>
+          <tr class="expand-row" *ngIf="expandedLine() === e.line_number">
+            <td colspan="5">
+              <div class="expand-content mono">{{ e.content }}</div>
+            </td>
+          </tr>
+        </ng-container>
+
+        <tr *ngIf="paged().length === 0">
+          <td colspan="5" class="no-results mono">No errors match the current filter.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Pagination -->
+  <div class="pagination" *ngIf="totalPages() > 1">
+    <button class="page-btn" [disabled]="currentPage() === 1"
+            (click)="currentPage.set(currentPage() - 1)">←</button>
+    <span class="page-info mono">{{ currentPage() }} / {{ totalPages() }}</span>
+    <button class="page-btn" [disabled]="currentPage() === totalPages()"
+            (click)="currentPage.set(currentPage() + 1)">→</button>
+  </div>
+</div>

@@ -1,0 +1,108 @@
+<div class="shell">
+
+  <!-- ── Sidebar ─────────────────────────────────────────────── -->
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="logo-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
+        </svg>
+      </div>
+      <div class="logo-text">
+        <span class="logo-name">LOG INVESTIGATOR</span>
+        <span class="logo-sub mono">v1.0</span>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Upload section -->
+    <div class="sidebar-section">
+      <p class="section-label mono">UPLOAD</p>
+      <app-upload (uploaded)="onUploaded($event)"></app-upload>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Status -->
+
+
+    <div class="sidebar-footer">
+      <span class="mono">FastAPI + LangChain</span>
+      <span class="mono">RAG · Chroma</span>
+    </div>
+  </aside>
+
+  <!-- ── Main ────────────────────────────────────────────────── -->
+  <main class="main">
+
+    <!-- Header -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <h1 class="page-title">
+          {{ activeTab() === 'stats'  ? 'OVERVIEW'    :
+             activeTab() === 'errors' ? 'ERROR LOG'   :
+                                        'AI ANALYSIS' }}
+        </h1>
+        <div class="file-chip mono" *ngIf="result()">
+          {{ result()!.error_count | number }} errors in {{ result()!.total_lines | number }} lines
+        </div>
+      </div>
+
+      <nav class="tab-nav">
+        <button class="tab-btn" [class.active]="activeTab() === 'stats'"
+                (click)="setTab('stats')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/>
+            <line x1="6"  y1="20" x2="6"  y2="14"/>
+          </svg>
+          Stats
+        </button>
+        <button class="tab-btn" [class.active]="activeTab() === 'errors'"
+                (click)="setTab('errors')" [disabled]="!result()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+          Errors
+        </button>
+        <button class="tab-btn" [class.active]="activeTab() === 'chat'"
+                (click)="setTab('chat')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          </svg>
+          AI Chat
+        </button>
+      </nav>
+    </header>
+
+    <!-- Tab Content -->
+    <div class="content">
+
+      <!-- Empty state -->
+      <div class="welcome" *ngIf="!result() && activeTab() !== 'chat'">
+        <div class="welcome-icon">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+          </svg>
+        </div>
+        <h2 class="welcome-title">Upload a log file to begin</h2>
+        <p class="welcome-sub">Supports <span class="mono">.log</span>, <span class="mono">.txt</span>, and <span class="mono">.out</span> files. Errors are detected and indexed for AI analysis.</p>
+      </div>
+
+      <!-- Stats tab -->
+      <app-stats-panel *ngIf="activeTab() === 'stats' && result()"></app-stats-panel>
+
+      <!-- Errors tab -->
+      <app-error-table *ngIf="activeTab() === 'errors'"></app-error-table>
+
+      <!-- Chat tab -->
+      <div class="chat-layout" *ngIf="activeTab() === 'chat'">
+        <app-chat></app-chat>
+      </div>
+    </div>
+  </main>
+</div>

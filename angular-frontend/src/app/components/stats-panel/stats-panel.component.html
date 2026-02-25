@@ -1,0 +1,58 @@
+<div class="stats-grid" *ngIf="result()">
+
+  <!-- KPI Cards -->
+  <div class="kpi-row">
+    <div class="kpi">
+      <span class="kpi-label">TOTAL LINES</span>
+      <span class="kpi-value mono">{{ result()!.total_lines | number }}</span>
+    </div>
+    <div class="kpi kpi-error">
+      <span class="kpi-label">ERRORS FOUND</span>
+      <span class="kpi-value mono red">{{ result()!.error_count | number }}</span>
+    </div>
+    <div class="kpi">
+      <span class="kpi-label">ERROR RATE</span>
+      <span class="kpi-value mono amber">{{ errorRate() }}%</span>
+    </div>
+    <div class="kpi">
+      <span class="kpi-label">TOP CATEGORY</span>
+      <span class="kpi-value" *ngIf="topCategory()">
+        <span class="badge" [class]="'badge-' + categoryColor(topCategory()!)">
+          {{ topCategory() }}
+        </span>
+      </span>
+      <span class="kpi-value mono" *ngIf="!topCategory()">—</span>
+    </div>
+  </div>
+
+  <!-- Category breakdown -->
+  <div class="breakdown-row">
+    <div class="breakdown-card" *ngIf="categoryEntries().length">
+      <h4 class="card-title">BY CATEGORY</h4>
+      <div class="bar-list">
+        <div class="bar-item" *ngFor="let entry of categoryEntries()">
+          <span class="bar-label mono">{{ entry[0] }}</span>
+          <div class="bar-track">
+            <div
+              class="bar-fill"
+              [class]="'bar-' + categoryColor(entry[0])"
+              [style.width.%]="(entry[1] / result()!.error_count) * 100"
+            ></div>
+          </div>
+          <span class="bar-count mono">{{ entry[1] }}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="breakdown-card" *ngIf="topPatterns().length">
+      <h4 class="card-title">TOP PATTERNS</h4>
+      <div class="pattern-list">
+        <div class="pattern-item" *ngFor="let p of topPatterns(); let i = index">
+          <span class="rank mono">#{{ i + 1 }}</span>
+          <span class="pattern-name">{{ p[0] }}</span>
+          <span class="pattern-count mono">{{ p[1] }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
