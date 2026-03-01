@@ -3,12 +3,9 @@ FastAPI wrapper for the log analyzer backend.
 Run: uvicorn fastapi_backend.api:app --reload
 """
 
-import re
 import io
-import os
 import threading
 from pathlib import Path
-from collections import Counter
 from typing import Optional
 
 from fastapi import FastAPI, File, UploadFile, HTTPException
@@ -16,133 +13,64 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from langchain_core.documents import Document
 
-from backend.retriever import retriever
-from backend.query     import query
+# ── Your existing backend modules (unchanged) ──────────────────────────────────
+from backend.retriever  import retriever
+from backend.query      import query
+from backend.log_filter import (
+    ERROR_PATTERNS,
+    categorize_error,
+    extract_error_code,
+    process_log_stream,
+)
 
-# ── Persistent upload directory ────────────────────────────────────────────────
+# ── Persistent storage for error-only log files ────────────────────────────────
 UPLOAD_DIR = Path("./uploaded_logs")
 UPLOAD_DIR.mkdir(exist_ok=True)
-
-# ── Error patterns ─────────────────────────────────────────────────────────────
-ERROR_PATTERNS = {
-    r'\bERROR\b'                   : 'General Error',
-    r'\bFAIL(ED)?\b'              : 'Failure',
-    r'\bEXCEPTION\b'              : 'Exception',
-    r'\bCRITICAL\b'               : 'Critical Error',
-    r'\bFATAL\b'                  : 'Fatal Error',
-    r'\bPANIC\b'                  : 'System Panic',
-    r'\bTIMEOUT\b'                : 'Timeout',
-    r'\bDENIED\b'                 : 'Access Denied',
-    r'\bREJECTED\b'               : 'Request Rejected',
-    r'\bABORT\b'                  : 'Operation Aborted',
-    r'\bSEGMENTATION FAULT\b'     : 'Segmentation Fault',
-    r'\bOUT OF MEMORY\b'          : 'Out of Memory',
-    r'\bSTACK TRACE\b'            : 'Stack Trace',
-    r'\bTRACEBACK\b'              : 'Python Traceback',
-    r'\bUNHANDLED\b'              : 'Unhandled Error',
-    r'HTTP/\d\.\d"\s(5\d\d|4\d\d)': 'HTTP Error',
-    r'\s(5\d\d|4\d\d)\s'          : 'HTTP Status Code',
-    r'\[error\]'                   : 'Nginx/Apache Error',
-    r'\[emerg\]'                   : 'Emergency Error',
-    r'\[crit\]'                    : 'Critical Log',
-    r'\[alert\]'                   : 'Alert',
-}
-
-CATEGORY_KEYWORDS = {
-    'database'   : ['database','sql','mysql','postgres','oracle','mongodb','query','transaction'],
-    'performance': ['timeout','slow','latency','performance','bottleneck','response time'],
-    'security'   : ['auth','authentication','login','password','permission','access','unauthorized','forbidden'],
-    'resource'   : ['memory','heap','disk','cpu','resource','out of memory','oom','disk full'],
-    'network'    : ['network','connection','socket','http','https','tcp','udp','connection refused'],
-    'io'         : ['file','io','read','write','permission denied','file not found','eof'],
-    'application': ['exception','null pointer','index out of bounds','type error','syntax error'],
-}
 
 # ── Global state ───────────────────────────────────────────────────────────────
 _state: dict = {
     "qa_chain"   : None,
     "filename"   : None,
-    "saved_path" : None,   # Path to the saved log file on disk
-    "rag_status" : "idle", # idle | building | ready | error
+    "saved_path" : None,
+    "rag_status" : "idle",   # idle | building | ready | error
     "rag_error"  : None,
 }
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
-def _categorize(line: str) -> str:
-    ll = line.lower()
-    for cat, kws in CATEGORY_KEYWORDS.items():
-        if any(k in ll for k in kws):
-            return cat
-    return 'application'
-
-
-def _extract_code(line: str) -> Optional[str]:
-    m = re.search(r'\b(\d{3})\b', line)
-    if m and m.group(1).startswith(('4', '5')):
-        return f"HTTP_{m.group(1)}"
-    for p in [r'ERR[_-](\w+)', r'ERROR[_-](\w+)', r'code[:\s]+(\w+)',
-              r'error\s+code\s*[=:]\s*(\w+)', r'\[(\w+)\]']:
-        mm = re.search(p, line, re.IGNORECASE)
-        if mm:
-            return mm.group(1).upper()
-    return None
-
-
-def _stream_scan_bytes(raw_bytes: bytes, selected_patterns: list) -> dict:
+def _scan_stream(raw_bytes: bytes, selected_patterns: list) -> dict:
     """
-    Stream-scan raw bytes line-by-line in memory.
-    The full file is never written to disk — only matched error lines are saved.
+    Wraps your existing process_log_stream() which already streams line-by-line.
+    We just feed it an io.TextIOWrapper over the raw bytes.
     """
-    compiled = [
-        (re.compile(p, re.IGNORECASE), desc)
-        for p, desc in ERROR_PATTERNS.items()
-        if p in selected_patterns
-    ]
-
-    errors       = []
-    categories   = Counter()
-    codes        = Counter()
-    pattern_hits = Counter()
-    total_lines  = 0
-
-    stream = io.StringIO(raw_bytes.decode("utf-8", errors="replace"))
-    for line in stream:
-        total_lines += 1
-        line = line.rstrip("\n")
-
-        for pat, desc in compiled:
-            if pat.search(line):
-                cat  = _categorize(line)
-                code = _extract_code(line)
-                errors.append({
-                    "line_number"    : total_lines,
-                    "content"        : line,
-                    "category"       : cat,
-                    "error_code"     : code,
-                    "matched_pattern": desc,
-                })
-                categories[cat]    += 1
-                pattern_hits[desc] += 1
-                if code:
-                    codes[code] += 1
-                break
+    text_stream = io.TextIOWrapper(
+        io.BytesIO(raw_bytes), encoding="utf-8", errors="replace"
+    )
+    errors, stats = process_log_stream(text_stream, selected_patterns)
 
     return {
-        "total_lines"    : total_lines,
-        "error_count"    : len(errors),
-        "errors"         : errors,
-        "categories"     : dict(categories),
-        "error_codes"    : dict(codes),
-        "pattern_matches": dict(pattern_hits),
+        "total_lines"    : stats["total_lines"],
+        "error_count"    : stats["error_count"],
+        "errors"         : [
+            {
+                "line_number"    : e["line_number"],
+                "content"        : e["content"],
+                "category"       : e["category"],
+                "error_code"     : e["error_code"],
+                "matched_pattern": e["matched_pattern"],
+            }
+            for e in errors
+        ],
+        "categories"     : dict(stats["categories"]),
+        "error_codes"    : dict(stats["error_codes"]),
+        "pattern_matches": dict(stats["pattern_matches"]),
     }
 
 
 def _build_rag_in_background(error_lines: list, filename: str) -> None:
     """
     Background thread.
-    Vectorises only the matched error lines — not the full file.
-    This matches the original Streamlit behaviour exactly.
+    Vectorises only the matched error lines — mirrors original Streamlit behaviour.
     """
     _state["rag_status"] = "building"
     _state["qa_chain"]   = None
@@ -162,7 +90,7 @@ app = FastAPI(title="Log Analyzer API", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:4200"],
+    allow_origins=["http://localhost:4200", "http://localhost"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -180,18 +108,19 @@ class RescanRequest(BaseModel):
 
 @app.get("/patterns")
 def get_patterns():
+    """Return all available error patterns from log_filter.py."""
     return {"patterns": list(ERROR_PATTERNS.keys()), "descriptions": ERROR_PATTERNS}
 
 
 @app.post("/upload")
 async def upload_log(file: UploadFile = File(...)):
     """
-    1. Save the uploaded file to ./uploaded_logs/<filename>  (persists on disk).
-    2. Stream-scan from disk line-by-line  →  fast, ~10-15 s for 57 MB.
-    3. Build RAG index in background from error lines only.
-    4. Return scan results immediately.
+    1. Read bytes into memory — full file is never written to disk.
+    2. Scan using your existing process_log_stream() from log_filter.py.
+    3. Save ONLY the matched error lines to ./uploaded_logs/.
+    4. Build RAG index in background from those error lines.
+    5. Return scan results immediately.
     """
-    # ── Stream-scan from raw bytes in memory (never write the full file) ───────
     safe_name = Path(file.filename).name
     raw_bytes = await file.read()
 
@@ -199,16 +128,18 @@ async def upload_log(file: UploadFile = File(...)):
     _state["rag_status"] = "building"
     _state["rag_error"]  = None
 
-    # Scan the full file in memory
-    result = _stream_scan_bytes(raw_bytes, list(ERROR_PATTERNS.keys()))
+    # ── Scan using your existing log_filter logic ──────────────────────────────
+    result = _scan_stream(raw_bytes, list(ERROR_PATTERNS.keys()))
     result["filename"]   = safe_name
     result["rag_status"] = "building"
 
-    # ── Save ONLY the error lines to disk ─────────────────────────────────────
+    # ── Save only the error lines to disk ─────────────────────────────────────
     error_lines = [e["content"] for e in result["errors"]]
     saved_path  = UPLOAD_DIR / safe_name
     saved_path.write_text("\n".join(error_lines), encoding="utf-8")
     _state["saved_path"] = saved_path
+
+    # ── Build RAG in background ────────────────────────────────────────────────
     threading.Thread(
         target=_build_rag_in_background,
         args=(error_lines, safe_name),
@@ -223,14 +154,14 @@ async def upload_log(file: UploadFile = File(...)):
 def rescan(req: RescanRequest):
     """
     Re-scan the saved error-lines file with a custom pattern subset.
-    Since only error lines were saved, this is fast and lightweight.
+    Uses your existing process_log_stream() from log_filter.py.
     """
     saved_path = _state.get("saved_path")
     if not saved_path or not Path(saved_path).exists():
         raise HTTPException(400, "No log file on disk. Upload a file first.")
 
     raw_bytes = Path(saved_path).read_bytes()
-    result = _stream_scan_bytes(raw_bytes, req.patterns)
+    result = _scan_stream(raw_bytes, req.patterns)
     result["filename"] = _state["filename"]
     result["errors"]   = result["errors"][:500]
     return result
@@ -240,10 +171,10 @@ def rescan(req: RescanRequest):
 def rag_status():
     """Angular polls this to know when AI chat becomes available."""
     return {
-        "status"   : _state["rag_status"],
-        "filename" : _state["filename"],
-        "saved"    : _state["saved_path"] is not None and Path(_state["saved_path"]).exists(),
-        "error"    : _state["rag_error"],
+        "status"  : _state["rag_status"],
+        "filename": _state["filename"],
+        "saved"   : _state["saved_path"] is not None and Path(_state["saved_path"]).exists(),
+        "error"   : _state["rag_error"],
     }
 
 
@@ -252,7 +183,6 @@ def status():
     return {
         "ready"   : _state["rag_status"] == "ready",
         "filename": _state["filename"],
-        "saved"   : _state["saved_path"] is not None and Path(_state["saved_path"]).exists(),
     }
 
 

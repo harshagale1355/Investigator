@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Angular build artifacts (Docker builds these fresh)
+angular-frontend/node_modules/
+angular-frontend/dist/
+
+# Data directories (managed as Docker volumes)
+uploaded_logs/
+chroma_db/
+
+# Misc
+.git/
+.env
+*.log

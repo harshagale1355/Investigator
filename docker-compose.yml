@@ -1,0 +1,35 @@
+version: '3.9'
+
+services:
+
+  # ── FastAPI Backend ──────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: investigator-backend
+    ports:
+      - "8000:8000"          # your machine:container
+    env_file:
+      - .env                 # loads OPENROUTER_API_KEY automatically
+    volumes:
+      - uploaded_logs:/app/uploaded_logs   # error logs survive container restarts
+      - chroma_db:/app/chroma_db           # vector store survives container restarts
+    restart: unless-stopped
+
+  # ── Angular Frontend ─────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: investigator-frontend
+    ports:
+      - "80:80"              # access the app at http://localhost
+    depends_on:
+      - backend              # frontend starts after backend is up
+    restart: unless-stopped
+
+# ── Named volumes (data persists even if containers are deleted) ───────────────
+volumes:
+  uploaded_logs:
+  chroma_db:

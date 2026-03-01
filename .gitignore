@@ -213,3 +213,6 @@ files/
 node_modules
 .node_modules
 ./node_modules
+.tsbuildinfo
+tsbuildinfo
+./tsbuildinfo

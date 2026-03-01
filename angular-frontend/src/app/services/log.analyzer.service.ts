@@ -1,6 +1,7 @@
 import { Injectable, signal, computed } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable, tap, interval, switchMap, takeWhile, startWith } from 'rxjs';
+import { Observable, tap, interval, switchMap, takeWhile, startWith, catchError, of } from 'rxjs';
+import { environment } from '../../environments/environment';
 import {
   ScanResult, QueryResponse, StatusResponse,
   PatternsResponse, ChatMessage
@@ -10,7 +11,7 @@ export type RagStatus = 'idle' | 'building' | 'ready' | 'error';
 
 @Injectable({ providedIn: 'root' })
 export class LogAnalyzerService {
-  private readonly API = 'http://localhost:8000';
+  private readonly API = environment.apiUrl;
 
   readonly scanResult  = signal<ScanResult | null>(null);
   readonly isUploading = signal(false);
@@ -19,7 +20,6 @@ export class LogAnalyzerService {
   readonly currentFile = signal<string | null>(null);
   readonly chatHistory = signal<ChatMessage[]>([]);
 
-  // Derived
   readonly isReady = computed(() => this.ragStatus() === 'ready');
 
   readonly errorRate = computed(() => {
@@ -46,12 +46,15 @@ export class LogAnalyzerService {
     return this.http.get<StatusResponse>(`${this.API}/status`).pipe(
       tap(s => {
         if (s.ready) this.ragStatus.set('ready');
-        this.currentFile.set(s.filename);
-      })
+        if (s.filename) {
+          this.currentFile.set(s.filename);
+          if (!s.ready) this.ragStatus.set('building');
+        }
+      }),
+      catchError(() => of({ ready: false, filename: null } as StatusResponse))
     );
   }
 
-  /** Upload file → get scan results immediately, then poll for RAG readiness */
   upload(file: File): Observable<ScanResult> {
     const fd = new FormData();
     fd.append('file', file);
@@ -65,16 +68,20 @@ export class LogAnalyzerService {
         this.isUploading.set(false);
         this.ragStatus.set('building');
         this.chatHistory.set([]);
-        this._pollRagStatus();   // start polling in background
+        this._pollRagStatus();
       })
     );
   }
 
-  /** Poll /rag-status every 3 s until ready or error */
+  /** Poll /rag-status every 3s until ready or error. Survives HTTP errors. */
   private _pollRagStatus(): void {
     interval(3000).pipe(
       startWith(0),
-      switchMap(() => this.http.get<{ status: RagStatus }>(`${this.API}/rag-status`)),
+      switchMap(() =>
+        this.http.get<{ status: RagStatus }>(`${this.API}/rag-status`).pipe(
+          catchError(() => of({ status: 'building' as RagStatus }))  // retry on network error
+        )
+      ),
       tap(r => this.ragStatus.set(r.status)),
       takeWhile(r => r.status === 'building', true)
     ).subscribe();

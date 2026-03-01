@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Investigator — Architecture Diagram</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Syne:wght@400;700;800&display=swap');
+
+  :root {
+    --bg: #0a0c0f;
+    --bg2: #0f1217;
+    --bg3: #141820;
+    --green: #00ff88;
+    --green-dim: #00cc6a;
+    --green-glow: rgba(0,255,136,0.15);
+    --blue: #4fc3f7;
+    --blue-dim: #0288d1;
+    --orange: #ffab40;
+    --purple: #ce93d8;
+    --red: #ef5350;
+    --text: #c8d0dc;
+    --text-dim: #5a6478;
+    --border: #1e2530;
+    --border-bright: #2a3545;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+    position: relative;
+  }
+
+  /* Scanline overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.03) 2px,
+      rgba(0,0,0,0.03) 4px
+    );
+    pointer-events: none;
+    z-index: 100;
+  }
+
+  /* Grid background */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,255,136,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,255,136,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .wrapper {
+    position: relative;
+    z-index: 1;
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 48px 32px 64px;
+  }
+
+  /* Header */
+  .header {
+    text-align: center;
+    margin-bottom: 56px;
+  }
+
+  .header-tag {
+    font-size: 11px;
+    letter-spacing: 0.3em;
+    color: var(--green);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .header-tag::before,
+  .header-tag::after {
+    content: '';
+    width: 40px;
+    height: 1px;
+    background: var(--green);
+    opacity: 0.4;
+  }
+
+  .header h1 {
+    font-family: 'Syne', sans-serif;
+    font-size: 36px;
+    font-weight: 800;
+    color: #fff;
+    letter-spacing: -0.02em;
+    margin-bottom: 8px;
+  }
+
+  .header h1 span { color: var(--green); }
+
+  .header-sub {
+    font-size: 12px;
+    color: var(--text-dim);
+    letter-spacing: 0.05em;
+  }
+
+  /* Main diagram layout */
+  .diagram {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  /* Row */
+  .row {
+    display: flex;
+    gap: 16px;
+    align-items: stretch;
+  }
+
+  .row.center { justify-content: center; }
+
+  /* Layer label */
+  .layer-label {
+    writing-mode: vertical-rl;
+    font-size: 9px;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    padding: 0 4px;
+  }
+
+  /* Box */
+  .box {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    position: relative;
+    transition: border-color 0.2s;
+    flex: 1;
+  }
+
+  .box:hover { border-color: var(--border-bright); }
+
+  .box.green-accent { border-color: rgba(0,255,136,0.25); }
+  .box.green-accent:hover { border-color: rgba(0,255,136,0.5); }
+  .box.blue-accent { border-color: rgba(79,195,247,0.25); }
+  .box.blue-accent:hover { border-color: rgba(79,195,247,0.5); }
+  .box.orange-accent { border-color: rgba(255,171,64,0.25); }
+  .box.purple-accent { border-color: rgba(206,147,216,0.25); }
+  .box.red-accent { border-color: rgba(239,83,80,0.25); }
+
+  /* Glow dot */
+  .box::before {
+    content: '';
+    position: absolute;
+    top: -1px; left: 20px;
+    width: 40px; height: 2px;
+    border-radius: 0 0 4px 4px;
+  }
+
+  .box.green-accent::before { background: var(--green); box-shadow: 0 0 8px var(--green); }
+  .box.blue-accent::before { background: var(--blue); box-shadow: 0 0 8px var(--blue); }
+  .box.orange-accent::before { background: var(--orange); box-shadow: 0 0 8px var(--orange); }
+  .box.purple-accent::before { background: var(--purple); box-shadow: 0 0 8px var(--purple); }
+  .box.red-accent::before { background: var(--red); box-shadow: 0 0 8px var(--red); }
+
+  .box-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .box.green-accent .box-title { color: var(--green); }
+  .box.blue-accent .box-title { color: var(--blue); }
+  .box.orange-accent .box-title { color: var(--orange); }
+  .box.purple-accent .box-title { color: var(--purple); }
+  .box.red-accent .box-title { color: var(--red); }
+
+  .box-icon {
+    width: 18px;
+    height: 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+  }
+
+  .chip-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  .chip {
+    font-size: 10px;
+    padding: 3px 8px;
+    border-radius: 3px;
+    letter-spacing: 0.03em;
+    border: 1px solid;
+  }
+
+  .chip.green { color: var(--green-dim); border-color: rgba(0,255,136,0.2); background: rgba(0,255,136,0.05); }
+  .chip.blue { color: var(--blue); border-color: rgba(79,195,247,0.2); background: rgba(79,195,247,0.05); }
+  .chip.orange { color: var(--orange); border-color: rgba(255,171,64,0.2); background: rgba(255,171,64,0.05); }
+  .chip.purple { color: var(--purple); border-color: rgba(206,147,216,0.2); background: rgba(206,147,216,0.05); }
+  .chip.red { color: var(--red); border-color: rgba(239,83,80,0.2); background: rgba(239,83,80,0.05); }
+  .chip.dim { color: var(--text-dim); border-color: var(--border); background: transparent; }
+
+  .box-desc {
+    font-size: 10px;
+    color: var(--text-dim);
+    line-height: 1.6;
+    margin-top: 6px;
+  }
+
+  /* Arrow connector */
+  .arrow-row {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 4px;
+    height: 32px;
+    position: relative;
+  }
+
+  .arrow-line {
+    width: 2px;
+    height: 100%;
+    background: linear-gradient(to bottom, var(--border-bright), var(--green));
+    margin: 0 auto;
+    position: relative;
+  }
+
+  .arrow-line::after {
+    content: '▼';
+    position: absolute;
+    bottom: -8px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: var(--green);
+    font-size: 10px;
+  }
+
+  .arrow-label {
+    position: absolute;
+    right: calc(50% + 12px);
+    font-size: 9px;
+    color: var(--text-dim);
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+    background: var(--bg);
+    padding: 2px 6px;
+    border-radius: 2px;
+    border: 1px solid var(--border);
+  }
+
+  /* Multi arrow */
+  .arrows-multi {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    height: 36px;
+    padding: 0 60px;
+  }
+
+  .arrow-single {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .arrow-single .line {
+    width: 1px;
+    height: 20px;
+    background: linear-gradient(to bottom, var(--border-bright), rgba(0,255,136,0.5));
+  }
+
+  .arrow-single .tip {
+    color: rgba(0,255,136,0.5);
+    font-size: 8px;
+  }
+
+  .arrow-single .lbl {
+    font-size: 9px;
+    color: var(--text-dim);
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+  }
+
+  /* Wide box spanning full width */
+  .box.wide { flex: none; width: 100%; }
+
+  /* Two col layout */
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  /* Three col */
+  .three-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px;
+  }
+
+  /* Section divider */
+  .section-divider {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin: 8px 0;
+  }
+
+  .section-divider span {
+    font-size: 9px;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    white-space: nowrap;
+    padding: 4px 12px;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+  }
+
+  .section-divider::before,
+  .section-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* Flow line between boxes in a row */
+  .h-arrow {
+    display: flex;
+    align-items: center;
+    color: var(--text-dim);
+    font-size: 14px;
+    padding: 0 4px;
+    align-self: center;
+    flex-shrink: 0;
+  }
+
+  /* Status badge */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 9px;
+    padding: 2px 8px;
+    border-radius: 20px;
+    letter-spacing: 0.05em;
+  }
+
+  .badge.live {
+    background: rgba(0,255,136,0.1);
+    border: 1px solid rgba(0,255,136,0.3);
+    color: var(--green);
+  }
+
+  .badge.live::before {
+    content: '';
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--green);
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  /* Legend */
+  .legend {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    margin-top: 40px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+    justify-content: center;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+
+  .legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+  }
+
+  /* Sub items */
+  .sub-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    font-size: 10px;
+    color: var(--text-dim);
+    line-height: 1.5;
+    margin-top: 4px;
+  }
+
+  .sub-item::before {
+    content: '›';
+    color: var(--text-dim);
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  .highlight { color: var(--text); }
+
+  /* Outer container boxes */
+  .container-box {
+    border: 1px dashed var(--border-bright);
+    border-radius: 12px;
+    padding: 20px;
+    position: relative;
+    background: rgba(255,255,255,0.01);
+  }
+
+  .container-label {
+    position: absolute;
+    top: -10px;
+    left: 16px;
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    padding: 2px 10px;
+    background: var(--bg);
+    border: 1px solid var(--border-bright);
+    border-radius: 3px;
+  }
+
+  .container-label.green { color: var(--green); border-color: rgba(0,255,136,0.3); }
+  .container-label.blue { color: var(--blue); border-color: rgba(79,195,247,0.3); }
+  .container-label.orange { color: var(--orange); border-color: rgba(255,171,64,0.3); }
+
+  /* Animate in */
+  .box, .container-box {
+    animation: fadeUp 0.4s ease both;
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .box:nth-child(1) { animation-delay: 0.05s; }
+  .box:nth-child(2) { animation-delay: 0.1s; }
+  .box:nth-child(3) { animation-delay: 0.15s; }
+</style>
+</head>
+<body>
+<div class="wrapper">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-tag">System Architecture</div>
+    <h1><span>Investigator</span> — AI Log Analyzer</h1>
+    <div class="header-sub" style="display:flex;align-items:center;justify-content:center;gap:12px;margin-top:8px;">
+      <span>Full-Stack · Containerized · Cloud Deployed</span>
+      <span class="badge live">LIVE ON AWS EC2</span>
+    </div>
+  </div>
+
+  <div class="diagram">
+
+    <!-- ── LAYER 1: USER ── -->
+    <div class="section-divider"><span>Client Layer</span></div>
+
+    <div class="row center">
+      <div class="box green-accent" style="max-width:320px;">
+        <div class="box-title"><span class="box-icon">🖥️</span> User's Browser</div>
+        <div class="chip-list">
+          <span class="chip dim">Firefox / Chrome</span>
+          <span class="chip dim">http://13.233.236.135</span>
+        </div>
+        <div class="sub-item">Upload log files, view analytics, chat with AI</div>
+      </div>
+    </div>
+
+    <!-- Arrow -->
+    <div class="arrow-row">
+      <div style="display:flex;flex-direction:column;align-items:center;width:100%;">
+        <div class="arrow-label">HTTP :80</div>
+        <div class="arrow-line" style="width:2px;height:32px;background:linear-gradient(to bottom, rgba(0,255,136,0.4), rgba(79,195,247,0.4));margin:0 auto;position:relative;">
+          <div style="position:absolute;bottom:-8px;left:50%;transform:translateX(-50%);color:var(--blue);font-size:10px;">▼</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── LAYER 2: AWS EC2 ── -->
+    <div class="section-divider"><span>AWS EC2 — t2.micro (Free Tier) · Ubuntu 24</span></div>
+
+    <div class="container-box" style="border-color:rgba(255,171,64,0.2);">
+      <div class="container-label orange">🐳 Docker Compose</div>
+
+      <div style="display:flex;flex-direction:column;gap:16px;margin-top:8px;">
+
+        <!-- Nginx -->
+        <div class="box orange-accent wide">
+          <div class="box-title"><span class="box-icon">⚡</span> Nginx Reverse Proxy</div>
+          <div class="chip-list">
+            <span class="chip orange">nginx:alpine</span>
+            <span class="chip dim">Port 80</span>
+            <span class="chip dim">200MB upload limit</span>
+            <span class="chip dim">300s timeout</span>
+          </div>
+          <div class="two-col" style="margin-top:10px;gap:12px;">
+            <div>
+              <div class="sub-item"><span class="highlight">GET /</span> → Serve Angular static files</div>
+              <div class="sub-item"><span class="highlight">POST /api/*</span> → Proxy to backend:8000</div>
+            </div>
+            <div>
+              <div class="sub-item">Multi-stage build: Node builds, Nginx serves</div>
+              <div class="sub-item">No CORS config needed — single entry point</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Two containers side by side -->
+        <div class="two-col">
+
+          <!-- Frontend container -->
+          <div class="container-box" style="border-color:rgba(0,255,136,0.15);">
+            <div class="container-label green">Frontend Container</div>
+            <div style="margin-top:8px;">
+              <div class="box green-accent" style="border-top:none;">
+                <div class="box-title"><span class="box-icon">🅰️</span> Angular 19</div>
+                <div class="chip-list">
+                  <span class="chip green">Standalone Components</span>
+                  <span class="chip green">Signals</span>
+                  <span class="chip dim">JetBrains Mono</span>
+                </div>
+                <div class="sub-item" style="margin-top:8px;"><span class="highlight">Upload Tab</span> — drag & drop log files</div>
+                <div class="sub-item"><span class="highlight">Stats Panel</span> — KPIs, error rate, charts</div>
+                <div class="sub-item"><span class="highlight">Error Table</span> — paginated, searchable</div>
+                <div class="sub-item"><span class="highlight">Chat Tab</span> — RAG Q&amp;A, polls /rag-status</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Backend container -->
+          <div class="container-box" style="border-color:rgba(79,195,247,0.15);">
+            <div class="container-label blue">Backend Container</div>
+            <div style="margin-top:8px;">
+              <div class="box blue-accent">
+                <div class="box-title"><span class="box-icon">⚙️</span> FastAPI + Gunicorn</div>
+                <div class="chip-list">
+                  <span class="chip blue">python:3.11-slim</span>
+                  <span class="chip blue">1 worker</span>
+                  <span class="chip dim">Port 8000</span>
+                </div>
+                <div class="sub-item" style="margin-top:8px;"><span class="highlight">POST /upload</span> — stream scan, return instantly</div>
+                <div class="sub-item"><span class="highlight">GET /rag-status</span> — poll AI index state</div>
+                <div class="sub-item"><span class="highlight">POST /query</span> — LLM Q&amp;A</div>
+                <div class="sub-item"><span class="highlight">GET /status</span> — health check</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Volumes -->
+        <div class="two-col">
+          <div class="box" style="border-style:dashed;">
+            <div class="box-title" style="color:var(--text-dim);font-size:11px;">📦 Volume: uploaded_logs</div>
+            <div class="box-desc">Error-only lines persisted to disk. Full log file discarded after scan — never stored.</div>
+          </div>
+          <div class="box" style="border-style:dashed;">
+            <div class="box-title" style="color:var(--text-dim);font-size:11px;">📦 Volume: chroma_db</div>
+            <div class="box-desc">ChromaDB vector store. Persists across container restarts. Built from error lines only.</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Arrow to AI -->
+    <div class="arrow-row">
+      <div style="display:flex;flex-direction:column;align-items:center;width:100%;">
+        <div class="arrow-label">HTTPS API calls</div>
+        <div class="arrow-line" style="width:2px;height:32px;background:linear-gradient(to bottom, rgba(79,195,247,0.4), rgba(206,147,216,0.4));margin:0 auto;position:relative;">
+          <div style="position:absolute;bottom:-8px;left:50%;transform:translateX(-50%);color:var(--purple);font-size:10px;">▼</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── LAYER 3: AI PIPELINE ── -->
+    <div class="section-divider"><span>AI Pipeline</span></div>
+
+    <div class="three-col">
+
+      <div class="box purple-accent">
+        <div class="box-title"><span class="box-icon">🔍</span> Log Scanner</div>
+        <div class="chip-list">
+          <span class="chip purple">Streaming I/O</span>
+          <span class="chip dim">log_filter.py</span>
+        </div>
+        <div class="sub-item" style="margin-top:8px;">Line-by-line stream — never loads full file</div>
+        <div class="sub-item">20 regex patterns: ERROR, FATAL, HTTP 4xx/5xx, OOM, TIMEOUT...</div>
+        <div class="sub-item">Returns: count, categories, error codes</div>
+      </div>
+
+      <div class="box purple-accent">
+        <div class="box-title"><span class="box-icon">🧠</span> Embeddings + RAG</div>
+        <div class="chip-list">
+          <span class="chip purple">sentence-transformers</span>
+          <span class="chip dim">ChromaDB</span>
+        </div>
+        <div class="sub-item" style="margin-top:8px;">Background thread — doesn't block scan response</div>
+        <div class="sub-item">HuggingFace CPU embeddings on error lines only</div>
+        <div class="sub-item">LangChain retriever chains docs for context</div>
+      </div>
+
+      <div class="box purple-accent">
+        <div class="box-title"><span class="box-icon">💬</span> LLM via OpenRouter</div>
+        <div class="chip-list">
+          <span class="chip purple">OpenRouter API</span>
+          <span class="chip dim">Free model</span>
+        </div>
+        <div class="sub-item" style="margin-top:8px;">Retrieved error chunks sent as context</div>
+        <div class="sub-item">LangChain orchestrates prompt + retrieval</div>
+        <div class="sub-item">Answers scoped to your specific log file</div>
+      </div>
+
+    </div>
+
+    <!-- ── LAYER 4: EXTERNAL ── -->
+    <div class="arrow-row" style="height:24px;">
+      <div style="display:flex;flex-direction:column;align-items:center;width:100%;">
+        <div class="arrow-line" style="width:2px;height:24px;background:linear-gradient(to bottom, rgba(206,147,216,0.3), rgba(239,83,80,0.3));margin:0 auto;position:relative;">
+          <div style="position:absolute;bottom:-8px;left:50%;transform:translateX(-50%);color:var(--red);font-size:10px;">▼</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-divider"><span>External Services</span></div>
+
+    <div class="two-col" style="max-width:600px;margin:0 auto;width:100%;">
+      <div class="box red-accent">
+        <div class="box-title"><span class="box-icon">🌐</span> OpenRouter</div>
+        <div class="chip-list">
+          <span class="chip red">REST API</span>
+          <span class="chip dim">gpt-oss-20b:free</span>
+        </div>
+        <div class="box-desc">LLM gateway. Routes to multiple providers. Free tier available.</div>
+      </div>
+
+      <div class="box" style="border-color:rgba(255,171,64,0.2);">
+        <div class="box-title" style="color:var(--orange);"><span class="box-icon">☁️</span> AWS</div>
+        <div class="chip-list">
+          <span class="chip orange">EC2 t2.micro</span>
+          <span class="chip orange">30GB EBS</span>
+          <span class="chip dim">Free Tier</span>
+        </div>
+        <div class="box-desc">Cloud host. Security groups open port 80. Elastic IP for stable address.</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Legend -->
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:var(--green);"></div>Angular 19 Frontend</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--blue);"></div>FastAPI Backend</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--orange);"></div>Nginx / Infrastructure</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--purple);"></div>AI / ML Pipeline</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--red);"></div>External APIs</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--border-bright);border:1px dashed #fff2;"></div>Docker Volumes</div>
+  </div>
+
+</div>
+</body>
+</html>

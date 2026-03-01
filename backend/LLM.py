@@ -1,6 +1,6 @@
 from dotenv import load_dotenv
 import os 
-from langchain_community.chat_models import ChatOpenAI
+from langchain_openai import ChatOpenAI
 
 LLM_MODEL = "openai/gpt-oss-20b:free"
 LLM_BASE_URL = "https://openrouter.ai/api/v1"

@@ -1,16 +1,27 @@
-langchain
-pandas
-streamlit
-langchain-community
-sentence-transformers
-transformers
-langchain-huggingface
-Chroma
-dotenv
-openai
-langchain-classic
-plotly
+# Web framework
 fastapi>=0.115.0
 uvicorn[standard]>=0.32.0
 python-multipart>=0.0.12
+gunicorn>=22.0.0
+
+# LangChain
+langchain
+langchain-community
+langchain-huggingface
+langchain-openai
+langchain-text-splitters
+
+# Vector store
 chromadb
+
+# Embeddings - CPU only torch (avoids 2GB CUDA download)
+torch --index-url https://download.pytorch.org/whl/cpu
+sentence-transformers
+transformers
+
+# LLM / API
+openai
+
+# Utilities
+pandas
+python-dotenv

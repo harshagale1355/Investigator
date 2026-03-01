@@ -1,0 +1,23 @@
+# ── Start from a Python base image ────────────────────────────────────────────
+FROM python:3.11-slim
+
+# Set working directory inside the container
+WORKDIR /app
+
+# Copy requirements first (so Docker caches this layer — faster rebuilds)
+COPY requirements.txt .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the rest of your project into the container
+COPY . .
+
+# Create the folder where error logs get saved
+RUN mkdir -p uploaded_logs
+
+# Expose port 8000 so the outside world can reach the API
+EXPOSE 8000
+
+# Start the server
+CMD ["gunicorn", "-k", "uvicorn.workers.UvicornWorker", "-w", "2", "-b", "0.0.0.0:8000", "fastapi_backend.api:app"]

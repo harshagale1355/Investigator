@@ -26,10 +26,11 @@ export class ChatComponent implements AfterViewChecked {
 
   private svc: LogAnalyzerService = inject(LogAnalyzerService);
 
-  readonly messages   = this.svc.chatHistory;
-  readonly isQuerying = this.svc.isQuerying;
-  readonly isReady    = this.svc.isReady;
-  readonly ragStatus  = this.svc.ragStatus;
+  readonly messages    = this.svc.chatHistory;
+  readonly isQuerying  = this.svc.isQuerying;
+  readonly isReady     = this.svc.isReady;
+  readonly ragStatus   = this.svc.ragStatus;
+  readonly currentFile = this.svc.currentFile;   // ← used in template
 
   input       = signal('');
   suggestions = SUGGESTIONS;
